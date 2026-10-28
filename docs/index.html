@@ -1,0 +1,1279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Echo Oracle</title>
+<meta name="description" content="An AI-assisted recon and triage toolkit for authorized security assessment. Echo gathers, Oracle reasons, a human decides.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+  /* ============================================================
+     Design tokens
+     Pitch black ground. Echo cyan, Oracle purple. Colour is used
+     for identity and severity only; the chrome stays monochrome.
+     Layout: one sticky tab bar, one view visible at a time. The
+     Overview view alternates open sections with bordered bands.
+     ============================================================ */
+  :root {
+    --bg:     #000000;
+    --panel:  #0b0c0f;
+    --surface:  #0a0b0e;     /* cards: solid, so the dot field never shows through */
+    --surface2: #10121a;     /* cards on hover */
+    --code:     #070809;     /* terminal and code blocks */
+    --line:   #1b1d23;
+    --line2:  #2a2f38;
+    --text:   #f2f4f8;
+    --muted:  #9aa3b2;
+    --muted2: #b3bcca;       /* leads and taglines: a step brighter than card body text */
+    --faint:  #5c6672;
+    --echo:   #22d3ee;
+    --oracle: #a78bfa;
+    --green:  #2ee6a6;
+    --amber:  #f2b24c;       /* medium */
+    --red:    #f2606a;       /* high */
+    --low:    #fdd835;       /* low */
+    --info:   #6b7280;       /* info */
+    --crit:   #c01030;       /* critical */
+
+    /* Space Grotesk keeps the headlines' character; Geist carries the
+       running text, where Space Grotesk's quirks (the hooked y, the wide
+       counters) start to cost readability at 14px on black. */
+    --display: "Space Grotesk", "Geist", system-ui, sans-serif;
+    --sans: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+    color-scheme: dark;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+    line-height: 1.6;
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .mono { font-family: var(--mono); }
+
+  .wrap {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding-left:  max(16px, env(safe-area-inset-left,  0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  @media (min-width: 700px) {
+    .wrap { padding-left: max(28px, env(safe-area-inset-left, 0px)); padding-right: max(28px, env(safe-area-inset-right, 0px)); }
+  }
+
+  a { color: var(--echo); text-decoration: none; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--echo); outline-offset: 3px; border-radius: 4px; }
+
+  /* ============================================================
+     Backdrop: a cursor-reactive dot field on canvas, framed by two
+     hairline rails at the content edges. Everything else sits on
+     top in its own stacking context.
+     ============================================================ */
+  #dots {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .rails { position: fixed; inset: 0; z-index: 0; pointer-events: none; display: none; }
+  .rails::before, .rails::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(to bottom, transparent, rgba(255,255,255,0.07) 12%, rgba(255,255,255,0.07) 88%, transparent);
+  }
+  .rails::before { left: calc(50% - 500px); }
+  .rails::after  { left: calc(50% + 499px); }
+  @media (min-width: 1100px) { .rails { display: block; } }
+
+  nav, main, footer { position: relative; z-index: 1; }
+
+  /* ============================================================
+     Navigation: wordmark + tabs. Tabs switch views by hash.
+     ============================================================ */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    z-index: 30;
+    background: var(--bg);
+  }
+  nav {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 20;
+    background: rgba(0,0,0,0.82);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  nav .wrap {
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    height: 58px;
+  }
+  .wordmark { flex: none; font-family: var(--display); font-weight: 700; font-size: 18px; letter-spacing: -0.01em; color: var(--text); }
+  .wordmark .e { color: var(--echo); }
+  .wordmark .o { color: var(--oracle); }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    min-width: 0;
+    height: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs a {
+    position: relative;
+    flex: none;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 13.5px;
+    color: var(--muted);
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+  .tabs a::after {
+    content: "";
+    position: absolute;
+    left: 10px;
+    right: 10px;
+    bottom: -1px;
+    height: 1px;
+    background: var(--text);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+  .tabs a:hover { color: var(--text); }
+  .tabs a.active { color: var(--text); }
+  .tabs a.active::after { opacity: 1; }
+  .tabs .gh { margin-left: auto; color: var(--muted); }
+
+  /* ============================================================
+     Views
+     ============================================================ */
+  .view { padding-bottom: 20px; }
+
+  /* ============================================================
+     Section rhythm (Overview): open sections alternate with bands.
+     A band is a rounded container with a hairline top edge and a
+     faint glow under it. Nothing else sits on the black.
+     ============================================================ */
+  section { position: relative; padding: clamp(56px, 8vw, 96px) 0; }
+
+  .band { padding: 0; margin: clamp(16px, 3vw, 28px) 0; }
+  .band > .wrap { padding-left: 0; padding-right: 0; }
+  .band-in {
+    position: relative;
+    margin: 0 max(16px, env(safe-area-inset-left, 0px)) 0 max(16px, env(safe-area-inset-right, 0px));
+    padding: clamp(44px, 7vw, 84px) clamp(16px, 4vw, 48px);
+    border-top: 1px solid var(--line2);
+    border-radius: 24px 24px 0 0;
+    background:
+      linear-gradient(to bottom, rgba(255,255,255,0.025), transparent 55%),
+      #040507;
+    overflow: hidden;
+    --accent: var(--text);
+    --aglow: rgba(255,255,255,0.10);
+  }
+  @media (min-width: 700px) { .band-in { margin-left: 0; margin-right: 0; } }
+  .band-in.cyan   { --accent: var(--echo);   --aglow: rgba(34,211,238,0.20); }
+  .band-in.purple { --accent: var(--oracle); --aglow: rgba(167,139,250,0.22); }
+  .band-in.green  { --accent: var(--green);  --aglow: rgba(46,230,166,0.18); }
+  .band-in::before {
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 46%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.8;
+  }
+  .band-in::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 70%;
+    height: 220px;
+    background: radial-gradient(ellipse at top, var(--aglow), transparent 70%);
+    pointer-events: none;
+  }
+  .band-in > * { position: relative; z-index: 1; }
+
+  /* ============================================================
+     Hero
+     ============================================================ */
+  .hero {
+    position: relative;
+    padding: clamp(56px, 10vw, 112px) 0 clamp(48px, 7vw, 76px);
+    overflow: hidden;
+  }
+  .hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(900px 420px at 50% -10%, rgba(34,211,238,0.16), transparent 65%),
+      radial-gradient(700px 360px at 80% 30%,  rgba(167,139,250,0.10), transparent 65%);
+    pointer-events: none;
+  }
+  .hero .wrap { display: flex; flex-direction: column; align-items: center; text-align: center; }
+
+  .hero .wrap > * { animation: rise 0.85s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+  .hero h1       { animation-delay: 0.05s; }
+  .hero .tagline { animation-delay: 0.16s; }
+  .hero .ethos   { animation-delay: 0.26s; }
+  .hero .cta     { animation-delay: 0.36s; }
+  .hero .term    { animation-delay: 0.48s; }
+  @keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+
+  .hero h1 {
+    font-family: var(--display);
+    margin: 0 0 20px;
+    font-size: clamp(40px, 9.5vw, 92px);
+    font-weight: 500;
+    line-height: 0.98;
+    letter-spacing: -0.04em;
+    text-wrap: balance;
+  }
+  .hero h1 .e { color: var(--echo); }
+  .hero h1 .o { color: var(--oracle); }
+
+  .tagline { max-width: 42ch; margin: 0 auto 14px; font-size: clamp(18px, 2.4vw, 22px); color: var(--muted2); text-wrap: balance; }
+  .ethos { max-width: 54ch; margin: 0 auto 30px; font-size: 15px; color: var(--faint); }
+  .ethos b { color: var(--text); font-weight: 500; }
+
+  .cta { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  .btn {
+    padding: 11px 20px;
+    border: 1px solid var(--line2);
+    border-radius: 9px;
+    color: var(--text);
+    font-size: 14.5px;
+    font-weight: 500;
+    transition: border-color 0.2s, background 0.2s, transform 0.2s, box-shadow 0.2s;
+  }
+  .btn:hover { border-color: var(--faint); transform: translateY(-2px); }
+  .btn.primary { background: var(--text); border-color: var(--text); color: #000; font-weight: 600; }
+  .btn.primary:hover { background: #fff; box-shadow: 0 10px 30px -12px rgba(255,255,255,0.45); }
+
+  /* ============================================================
+     Terminal (hero, self-running)
+     ============================================================ */
+  .term {
+    width: 100%;
+    max-width: 780px;
+    margin: 44px auto 0;
+    text-align: left;
+    background: var(--code);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 30px 80px -40px rgba(34,211,238,0.35);
+  }
+  .term-bar { display: flex; align-items: center; gap: 8px; padding: 11px 15px; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .term-title { margin-left: 10px; font-size: 12px; color: var(--faint); }
+  .term-body { min-height: 300px; padding: 18px 18px 20px; font-family: var(--mono); font-size: 13px; line-height: 1.85; }
+  .tline { white-space: pre-wrap; word-break: break-word; }
+  .tline.out { opacity: 0; transform: translateY(3px); transition: opacity 0.3s ease, transform 0.3s ease; }
+  .tline.out.show { opacity: 1; transform: none; }
+  .endprompt { opacity: 0; transition: opacity 0.25s ease; }
+  .endprompt.show { opacity: 1; }
+  .cursor { display: inline-block; width: 8px; height: 15px; margin-left: 3px; background: var(--echo); vertical-align: text-bottom; animation: blink 1.05s step-end infinite; }
+  .cmd .cursor.off { display: none; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .term-body .c  { color: var(--green); }
+  .term-body .d  { color: var(--faint); }
+  .term-body .p  { color: var(--oracle); }
+  .term-body .crit { color: var(--crit);  font-weight: 700; }
+  .term-body .hi { color: var(--red);   font-weight: 700; }
+  .term-body .md { color: var(--amber); font-weight: 700; }
+  .term-body .lo { color: var(--low); font-weight: 700; }
+
+  /* ============================================================
+     Type scale
+     ============================================================ */
+  .section-head { margin: 0 0 clamp(28px, 4vw, 40px); }
+  .section-head.center { text-align: center; }
+  .section-head.center .lead { margin-left: auto; margin-right: auto; }
+
+  h2 {
+    font-family: var(--display);
+    margin: 0 0 14px;
+    font-size: clamp(30px, 4.6vw, 46px);
+    font-weight: 500;
+    line-height: 1.08;
+    letter-spacing: -0.035em;
+    text-wrap: balance;
+    background: linear-gradient(to bottom, #ffffff, rgba(255,255,255,0.72));
+    -webkit-background-clip: text;
+            background-clip: text;
+    color: transparent;
+  }
+  .lead { max-width: 62ch; margin: 0 0 12px; font-size: 17px; line-height: 1.6; color: var(--muted2); }
+  .lead:last-child { margin-bottom: 0; }
+
+  .eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0 0 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    color: var(--faint);
+  }
+  .eyebrow b { color: var(--muted); font-weight: 500; }
+  .eyebrow .sep { color: var(--line2); }
+
+  /* scroll reveal */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity 0.65s ease, transform 0.65s cubic-bezier(0.2, 0.7, 0.2, 1); transition-delay: calc(var(--i, 0) * 0.09s); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ============================================================
+     Overview components
+     ============================================================ */
+  .pipe { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; }
+  .stage { padding: 9px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-family: var(--mono); font-size: 13px; font-weight: 500; transition: transform 0.2s, border-color 0.2s; }
+  .stage:hover { transform: translateY(-2px); }
+  .stage.guard  { color: var(--green);  border-color: #17402f; }
+  .stage.echo   { color: var(--echo);   border-color: #113b44; }
+  .stage.oracle { color: var(--oracle); border-color: #2c2152; }
+  .stage.human  { color: var(--text);   border-color: var(--faint); }
+  .pipe .arrow { color: var(--faint); font-family: var(--mono); }
+
+  .engines { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .engine {
+    position: relative;
+    min-width: 0;
+    padding: 28px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--surface);
+    overflow: hidden;
+    transition: transform 0.25s, border-color 0.25s, box-shadow 0.25s;
+  }
+  .engine::before { content: ""; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 60%; height: 1px; background: linear-gradient(90deg, transparent, var(--accent), transparent); opacity: 0.8; }
+  .engine.e { --accent: var(--echo); }
+  .engine.o { --accent: var(--oracle); }
+  .engine.e:hover { transform: translateY(-4px); border-color: #113b44; box-shadow: 0 24px 54px -26px rgba(34,211,238,0.5); }
+  .engine.o:hover { transform: translateY(-4px); border-color: #2c2152; box-shadow: 0 24px 54px -26px rgba(167,139,250,0.5); }
+  .engine-top { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .engine-ico { flex: none; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--line); border-radius: 11px; color: var(--accent); }
+  .engine-ico svg { width: 21px; height: 21px; }
+  .engine h3 { margin: 0; font-family: var(--display); font-size: 21px; line-height: 1.1; font-weight: 600; letter-spacing: -0.01em; }
+  .engine .role { margin: 2px 0 0; font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+  .feats { display: flex; flex-direction: column; gap: 15px; }
+  .feat { display: flex; flex-direction: column; gap: 3px; padding-left: 15px; border-left: 2px solid var(--accent); }
+  .feat-t { font-size: 14.5px; font-weight: 600; color: var(--text); }
+  .feat-d { font-size: 13.5px; line-height: 1.5; color: var(--muted); }
+
+  .caps { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .cap { min-width: 0; padding: 26px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); transition: transform 0.25s, border-color 0.25s, background 0.25s; }
+  .cap:hover { transform: translateY(-4px); border-color: var(--line2); background: var(--surface2); }
+  .cap-ico { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 12px; color: var(--oracle); }
+  .cap-ico svg { width: 22px; height: 22px; }
+  .cap h4 { margin: 0 0 8px; font-family: var(--display); font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .cap p { margin: 0; font-size: 14px; line-height: 1.55; color: var(--muted); }
+
+  .rules { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .rule { display: flex; align-items: flex-start; gap: 14px; min-width: 0; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: background 0.2s, border-color 0.2s; }
+  .rule:hover { background: rgba(167,139,250,0.08); border-color: #2c2152; }
+  .rule .mark { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border: 1px solid #2c2152; border-radius: 10px; background: rgba(167,139,250,0.16); color: var(--oracle); font-family: var(--mono); font-size: 13px; font-weight: 700; }
+  .rule div b { display: block; margin-bottom: 3px; font-family: var(--display); font-size: 15px; font-weight: 600; }
+  .rule div span { font-size: 13.5px; color: var(--muted); }
+
+  .run {
+    min-width: 0;
+    padding: 22px 24px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--code);
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 2.1;
+  }
+  .run .cm { color: var(--text); }
+  .run .fl { color: var(--echo); }
+  .run .cx { color: var(--faint); }
+  .run .pr { color: var(--green); }
+  .run .ok { color: var(--green); }
+  .run .warn { color: var(--amber); }
+  .run .bad { color: var(--red); }
+  .run .crit { color: var(--crit); font-weight: 700; }
+  .run .pp { color: var(--oracle); }
+
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+  .cols > * { min-width: 0; }
+  .cols h4 { margin: 0 0 14px; font-family: var(--mono); font-size: 12.5px; font-weight: 500; letter-spacing: 0.06em; color: var(--muted); }
+  .tech { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tech span { padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); transition: border-color 0.2s, color 0.2s, transform 0.2s; }
+  .tech span:hover { border-color: var(--echo); color: var(--text); transform: translateY(-2px); }
+  .status { margin: 0; padding: 0; }
+  .status li { position: relative; margin: 11px 0; padding-left: 22px; list-style: none; font-size: 14px; color: var(--muted); }
+  .status li::before { content: ""; position: absolute; left: 0; top: 7px; width: 8px; height: 8px; border-radius: 50%; }
+  .status li.done::before { background: var(--green); box-shadow: 0 0 10px rgba(46,230,166,0.6); }
+  .status li.next::before { background: var(--amber); box-shadow: 0 0 10px rgba(242,178,76,0.6); }
+  .status li b { color: var(--text); font-weight: 500; }
+
+  /* ============================================================
+     Guide views
+     ============================================================ */
+  .view-head { padding: clamp(44px, 7vw, 80px) 0 clamp(28px, 4vw, 44px); }
+  .view-head .lead { font-size: 17px; }
+
+  .guide-body { padding-bottom: clamp(40px, 6vw, 72px); }
+
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    padding: clamp(28px, 4vw, 44px) 0 clamp(36px, 6vw, 64px);
+    border-top: 1px solid var(--line);
+  }
+  .pager a {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+    padding: 16px 18px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface);
+    color: var(--text);
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .pager a:hover { border-color: var(--line2); background: var(--surface2); }
+  .pager a.next { text-align: right; grid-column: 2; }
+  .pager a.prev { grid-column: 1; }
+  .pager small { font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.06em; color: var(--faint); }
+  .pager span { font-family: var(--display); font-size: 15px; font-weight: 600; }
+
+  /* setup */
+  .setup { display: grid; grid-template-columns: 0.9fr 1.4fr; gap: 22px; align-items: start; }
+  .setup > * { min-width: 0; }
+  .setup-steps { display: flex; flex-direction: column; gap: 12px; }
+  .setup-step { display: grid; grid-template-columns: 30px 1fr; gap: 12px; align-items: start; font-size: 14px; color: var(--muted); }
+  .setup-step .n { font-family: var(--mono); font-size: 12px; color: var(--echo); padding-top: 3px; }
+  .setup-step b { display: block; margin-bottom: 2px; color: var(--text); font-family: var(--display); font-weight: 600; font-size: 15px; }
+
+  /* stages */
+  .stages { display: flex; flex-direction: column; gap: 10px; }
+  .stagerow { display: grid; grid-template-columns: 150px 1.3fr 1fr; gap: 18px; align-items: start; padding: 18px 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); transition: border-color 0.2s, background 0.2s; }
+  .stagerow:hover { background: var(--surface2); border-color: var(--line2); }
+  .stagerow > * { min-width: 0; }
+  .stagerow .tag { display: inline-flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 13px; font-weight: 500; }
+  .stagerow .tag .idx { color: var(--faint); font-size: 11.5px; }
+  .stagerow.guard  .tag { color: var(--green); }
+  .stagerow.echo   .tag { color: var(--echo); }
+  .stagerow.oracle .tag { color: var(--oracle); }
+  .stagerow.human  .tag { color: var(--text); }
+  .stagerow .what { font-size: 14px; color: var(--muted); }
+  .stagerow .what b { color: var(--text); font-weight: 600; }
+  .stagerow .io { font-family: var(--mono); font-size: 12.5px; line-height: 1.75; color: var(--muted); overflow-x: auto; white-space: nowrap; }
+  .stagerow .io .k { color: var(--faint); }
+  .stagerow .io .v { color: var(--text); }
+
+  /* scenarios */
+  .scenarios { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .scenario { display: flex; flex-direction: column; gap: 12px; min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); transition: transform 0.25s, border-color 0.25s; }
+  .scenario:hover { transform: translateY(-3px); border-color: var(--line2); }
+  .scenario h4 { margin: 0; font-family: var(--display); font-size: 16.5px; font-weight: 600; letter-spacing: -0.01em; }
+  .scenario p { margin: 0; font-size: 13.5px; color: var(--muted); }
+  .scenario .run { padding: 14px 16px; font-size: 12.5px; line-height: 1.8; border-radius: 10px; }
+  .scenario .takeaway { padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+  .scenario .takeaway b { color: var(--text); font-weight: 600; }
+
+  /* legend */
+  .legend { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .legend-col { min-width: 0; padding: 20px 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+  .legend-col h4 { margin: 0 0 14px; font-family: var(--mono); font-size: 12px; font-weight: 500; letter-spacing: 0.06em; color: var(--muted); }
+  .legend-col ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+  .legend-col li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; font-size: 13.5px; color: var(--muted); }
+  .legend-col li b { color: var(--text); font-weight: 600; }
+  .legend-col li code { font-family: var(--mono); font-size: 12px; color: var(--muted2); }
+  .sw { display: inline-block; width: 46px; padding: 2px 0; margin-top: 2px; border-radius: 5px; font-family: var(--mono); font-size: 10.5px; font-weight: 700; text-align: center; letter-spacing: 0.04em; color: #000; }
+  .sw.crit { background: var(--crit); color: #fff; }
+  .sw.hi   { background: var(--red); }
+  .sw.md   { background: var(--amber); }
+  .sw.lo   { background: var(--low); }
+  .sw.info { background: var(--info); color: #fff; }
+  .sw.allow { background: var(--green); }
+  .sw.lead  { background: var(--amber); }
+  .sw.deny  { background: var(--red); }
+  .fld { display: inline-block; min-width: 46px; padding: 2px 7px; margin-top: 1px; border: 1px solid var(--line); border-radius: 5px; font-family: var(--mono); font-size: 11px; color: var(--oracle); white-space: nowrap; }
+
+  /* dashboard */
+  .shot { position: relative; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; background: var(--code); box-shadow: 0 40px 100px -50px rgba(167,139,250,0.45); }
+  .shot img { display: block; width: 100%; max-width: 100%; height: auto; }
+  .shot-cap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 18px; font-size: 13.5px; color: var(--muted); }
+  .shot-cap div { min-width: 0; padding-left: 14px; border-left: 2px solid var(--oracle); }
+  .shot-cap b { display: block; color: var(--text); font-weight: 600; margin-bottom: 2px; }
+
+  /* ============================================================
+     Footer
+     ============================================================ */
+  footer { padding: 40px 0 60px; font-size: 13px; color: var(--faint); border-top: 1px solid var(--line); }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+
+  /* ============================================================
+     Responsive
+     ============================================================ */
+  @media (max-width: 860px) {
+    .stagerow { grid-template-columns: 1fr; gap: 10px; }
+    .legend { grid-template-columns: 1fr; }
+    .setup { grid-template-columns: 1fr; }
+  }
+  @media (max-width: 680px) {
+    .engines, .caps, .rules, .scenarios, .shot-cap, .cols { grid-template-columns: 1fr; }
+    .pager { grid-template-columns: 1fr; }
+    .pager a.next, .pager a.prev { grid-column: auto; }
+  }
+  @media (max-width: 560px) {
+    nav .wrap { gap: 14px; }
+    .wordmark { font-size: 16px; }
+    .term-body { font-size: 12px; padding: 16px 15px; line-height: 1.8; }
+    .engine, .cap, .scenario { padding: 20px; }
+    .run { padding: 16px 14px; font-size: 12.5px; }
+    .cols { gap: 28px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; }
+    html { scroll-behavior: auto; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+    .tline.out, .endprompt { opacity: 1; transform: none; transition: none; }
+    .cursor { animation: none; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="dots" aria-hidden="true"></canvas>
+<div class="rails" aria-hidden="true"></div>
+
+<nav>
+  <div class="wrap">
+    <a class="wordmark" href="#overview"><span class="e">Echo</span> <span class="o">Oracle</span></a>
+    <div class="tabs" id="tabs">
+      <a href="#overview" data-view="overview">Overview</a>
+      <a href="#setup" data-view="setup">Setup</a>
+      <a href="#stages" data-view="stages">Stages</a>
+      <a href="#scenarios" data-view="scenarios">Scenarios</a>
+      <a href="#legend" data-view="legend">Legend</a>
+      <a href="#dashboard" data-view="dashboard">Dashboard</a>
+      <a class="gh" href="https://github.com/SomebodiyLost/echo-oracle" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+</nav>
+
+<main>
+
+<!-- ============================================================
+     OVERVIEW
+     ============================================================ -->
+<div class="view" id="view-overview">
+
+  <header class="hero">
+    <div class="wrap">
+      <h1 data-text><span class="e">Echo</span> <span class="o">Oracle</span></h1>
+      <p class="tagline" data-text>An AI-assisted reconnaissance and triage toolkit for authorized security assessment.</p>
+      <p class="ethos" data-text><b>Echo gathers. Oracle reasons. A human decides.</b> A deliberately human-in-the-loop design for bug bounty and penetration-testing work on targets you are authorized to test.</p>
+      <div class="cta" data-text>
+        <a class="btn primary" href="#setup">Get started</a>
+        <a class="btn" href="#run">See how it runs</a>
+      </div>
+
+      <div class="term">
+        <div class="term-bar">
+          <span class="dot" style="background:#ff5f56"></span>
+          <span class="dot" style="background:#ffbd2e"></span>
+          <span class="dot" style="background:#27c93f"></span>
+          <span class="term-title mono">echov assess</span>
+        </div>
+        <div class="term-body" id="termBody">
+          <div class="tline cmd"><span class="d">$</span> <span class="typed" data-text="python -m echov assess --target app.example.com"></span><span class="cursor"></span></div>
+          <div class="tline out"><span class="d">Scope guard:</span> <span class="c">ALLOW</span> app.example.com <span class="d">  matched allow rule</span></div>
+          <div class="tline out"><span class="d">1/4</span> scanning   <span class="d">· subfinder, httpx, nuclei</span></div>
+          <div class="tline out"><span class="d">2/4</span> triaging   <span class="d">· real findings separated from noise</span></div>
+          <div class="tline out">    <span class="d">severity</span>   <span class="crit">1 critical</span> <span class="d">·</span> <span class="hi">2 high</span> <span class="d">·</span> <span class="md">4 medium</span> <span class="d">· 11 suppressed as noise</span></div>
+          <div class="tline out"><span class="d">3/4</span> detection  <span class="d">· whatweb, wafw00f, headers, tls</span></div>
+          <div class="tline out"><span class="d">4/4</span> oracle     <span class="d">· reasoning over everything</span></div>
+          <div class="tline out">&nbsp;</div>
+          <div class="tline out"><span class="p">Oracle assessment</span> <span class="d">— prioritized leads</span></div>
+          <div class="tline out">  <span class="hi">HIGH</span>   Exposed API spec maps unprobed surface <span class="d">(A01)</span></div>
+          <div class="tline out">  <span class="md">MEDIUM</span> Metrics endpoint reachable unauthenticated <span class="d">(A05)</span></div>
+          <div class="tline out">  <span class="lo">LOW</span>    No security-header baseline <span class="d">(root cause of 9)</span></div>
+          <div class="tline out">&nbsp;</div>
+          <div class="tline out"><span class="d">WSTG coverage: 3/10 assessed · 7 gaps surfaced for review</span></div>
+          <div class="tline endprompt"><span class="d">$</span> <span class="cursor"></span></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section id="what">
+    <div class="wrap">
+      <div class="section-head center reveal" data-text>
+        <h2>A scanner that thinks, with a human at the controls</h2>
+        <p class="lead">Echo wraps the standard open-source recon tools behind one command and uses AI to cut scanner noise. Oracle, its reasoning engine, reads a finished run and surfaces the non-obvious, in-scope leads a checklist scanner walks past.</p>
+      </div>
+      <div class="pipe reveal" data-text>
+        <span class="stage guard">scope guard</span><span class="arrow">&rsaquo;</span>
+        <span class="stage echo">scan</span><span class="arrow">&rsaquo;</span>
+        <span class="stage echo">triage</span><span class="arrow">&rsaquo;</span>
+        <span class="stage echo">detect</span><span class="arrow">&rsaquo;</span>
+        <span class="stage oracle">oracle</span><span class="arrow">&rsaquo;</span>
+        <span class="stage human">human review</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="engines" class="band">
+    <div class="wrap">
+      <div class="band-in">
+        <div class="section-head center reveal" data-text><h2>Echo collects. Oracle reasons.</h2></div>
+        <div class="engines">
+          <div class="engine e reveal" style="--i:0">
+            <div class="engine-top">
+              <div class="engine-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+              <div><h3>Echo</h3><p class="role">the data engine</p></div>
+            </div>
+            <div class="feats">
+              <div class="feat"><span class="feat-t">Scope guard</span><span class="feat-d">A fail-closed allowlist with three verdicts, re-checked on everything discovered.</span></div>
+              <div class="feat"><span class="feat-t">Scanners</span><span class="feat-d">subfinder, httpx, nuclei, with opt-in nmap for ports.</span></div>
+              <div class="feat"><span class="feat-t">Detection registry</span><span class="feat-d">whatweb, wafw00f, TLS and security headers; noisy tools stay opt-in.</span></div>
+              <div class="feat"><span class="feat-t">AI triage</span><span class="feat-d">Separates real findings from scanner noise, with reasoning.</span></div>
+              <div class="feat"><span class="feat-t">Report and dashboard</span><span class="feat-d">Priority-ranked output and a live security console.</span></div>
+            </div>
+          </div>
+          <div class="engine o reveal" style="--i:1">
+            <div class="engine-top">
+              <div class="engine-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M18.7 5.3l-2.1 2.1M7.4 16.6l-2.1 2.1"/></svg></div>
+              <div><h3>Oracle</h3><p class="role">the reasoning engine</p></div>
+            </div>
+            <div class="feats">
+              <div class="feat"><span class="feat-t">WSTG methodology</span><span class="feat-d">Reasons across the OWASP testing categories and maps what it can assess versus the gaps.</span></div>
+              <div class="feat"><span class="feat-t">Method to inference</span><span class="feat-d">Each lead carries a structured reasoning chain and an OWASP class.</span></div>
+              <div class="feat"><span class="feat-t">Correlation</span><span class="feat-d">Ties scattered findings to shared root causes instead of a flat list.</span></div>
+              <div class="feat"><span class="feat-t">Multi-model cross-check</span><span class="feat-d">A second model from a different lab reviews the run; disagreements are flagged, not hidden.</span></div>
+              <div class="feat"><span class="feat-t">Blind reconciliation</span><span class="feat-d">A reviewer merges both assessments and settles the splits with reasoning.</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="caps">
+    <div class="wrap">
+      <div class="section-head center reveal" data-text><h2>What sets it apart</h2></div>
+      <div class="caps">
+        <div class="cap reveal" style="--i:0">
+          <div class="cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+          <h4>Finds the overlooked</h4>
+          <p>Reasons about in-scope surface recon never examined: endpoints a spec reveals, paths a stack implies. Not just known-bad patterns.</p>
+        </div>
+        <div class="cap reveal" style="--i:1">
+          <div class="cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></div>
+          <h4>Coverage gaps as a map</h4>
+          <p>Reports which WSTG categories the evidence cannot yet assess, turning absence of findings into a to-do list rather than a false all-clear.</p>
+        </div>
+        <div class="cap reveal" style="--i:0">
+          <div class="cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg></div>
+          <h4>Two models, one verdict</h4>
+          <p>Independent assessments from different labs, reconciled by a blind reviewer. Agreement raises confidence; disagreement earns your attention.</p>
+        </div>
+        <div class="cap reveal" style="--i:1">
+          <div class="cap-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div>
+          <h4>Read-only by design</h4>
+          <p>Oracle proposes information-gathering checks and flags what a human should test by hand. It never exploits.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="safety" class="band">
+    <div class="wrap">
+      <div class="band-in purple reveal">
+        <div class="section-head" data-text>
+          <h2>A scout, not an attacker</h2>
+          <p class="lead">The line that keeps this legal to run and honest to present. These are enforced in the architecture, not just stated.</p>
+        </div>
+        <div class="rules">
+          <div class="rule"><span class="mark">01</span><div><b>Authorized targets only</b><span>Nothing runs against a host that is not explicitly in the scope file. The guard fails closed.</span></div></div>
+          <div class="rule"><span class="mark">02</span><div><b>Read-only reasoning</b><span>The AI analyzes and advises. It generates no payloads, logins, or exploits.</span></div></div>
+          <div class="rule"><span class="mark">03</span><div><b>Human in the loop</b><span>Oracle proposes; a person reviews, runs the checks, and decides. Exploitation is always a deliberate human step.</span></div></div>
+          <div class="rule"><span class="mark">04</span><div><b>Scope-gated actions</b><span>Anything the tool reasons toward still clears the hostname guard before a single packet is sent.</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="run">
+    <div class="wrap">
+      <div class="section-head reveal" data-text>
+        <h2>One pipeline, or step by step</h2>
+        <p class="lead">Check scope first, always. Then run the whole pipeline in one command, or drive each stage yourself. The <a href="#stages">Stages</a> tab explains what each one writes.</p>
+      </div>
+      <div class="run reveal">
+<span class="cx"># confirm a target is in scope — sends nothing</span><br>
+<span class="cm">python -m echov scope-check</span> <span class="fl">--target</span> app.example.com<br><br>
+<span class="cx"># full pipeline: scan, triage, detect, reason, report</span><br>
+<span class="cm">python -m echov assess</span> <span class="fl">--target</span> app.example.com<br><br>
+<span class="cx"># or re-analyze a finished run: two models, then a blind reviewer merges them</span><br>
+<span class="cm">python -m echov oracle crosscheck</span> <span class="fl">--reconcile</span><br><br>
+<span class="cx"># view it live in the security console</span><br>
+<span class="cm">python -m streamlit run</span> dashboard/console.py
+      </div>
+    </div>
+  </section>
+
+  <section id="status" class="band">
+    <div class="wrap">
+      <div class="band-in green reveal">
+        <div class="cols">
+          <div>
+            <h4>STACK</h4>
+            <div class="tech">
+              <span>Python</span><span>Claude API</span><span>OpenAI API</span><span>subfinder</span>
+              <span>httpx</span><span>nuclei</span><span>nmap</span><span>pydantic</span><span>Streamlit</span><span>Kali Linux</span>
+            </div>
+          </div>
+          <div>
+            <h4>ROADMAP</h4>
+            <ul class="status">
+              <li class="done"><b>Echo</b> — scanners, scope guard, detection, triage, report, dashboard</li>
+              <li class="done"><b>Oracle</b> — reasoning core, WSTG methodology, coverage map</li>
+              <li class="done"><b>Cross-check</b> — multi-model review with blind reconciliation</li>
+              <li class="done"><b>Severity</b> — CVSS v3.1 banding on every finding</li>
+              <li class="done"><b>Console</b> — redesigned security dashboard</li>
+              <li class="next"><b>Next</b> — first run against a live authorized program</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============================================================
+     SETUP
+     ============================================================ -->
+<div class="view" id="view-setup" hidden>
+  <div class="wrap">
+    <div class="view-head" data-text>
+      <p class="eyebrow"><b>GUIDE</b><span class="sep">/</span>01 OF 05<span class="sep">/</span>SETUP</p>
+      <h2>Install once, snapshot, then work from the snapshot</h2>
+      <p class="lead">Echo Oracle runs on a dedicated Kali Linux VM. The scanners are Go binaries; the tool itself is a Python package. Practice targets run in Docker and bind to localhost only, so they are reachable from inside the VM and nowhere else.</p>
+    </div>
+    <div class="guide-body">
+      <div class="setup">
+        <div class="setup-steps" data-text>
+          <div class="setup-step"><span class="n">1</span><div><b>Scanners</b>Install subfinder, httpx and nuclei with Go, and put <span class="mono">~/go/bin</span> first on PATH so the ProjectDiscovery httpx wins over the Python package Kali ships under the same name.</div></div>
+          <div class="setup-step"><span class="n">2</span><div><b>Project</b>Clone, create a virtual environment, install the requirements.</div></div>
+          <div class="setup-step"><span class="n">3</span><div><b>Keys</b>Copy <span class="mono">.env.example</span> to <span class="mono">.env</span> and add the Claude API key. The OpenAI key is only needed for the cross-check.</div></div>
+          <div class="setup-step"><span class="n">4</span><div><b>Scope</b>Copy <span class="mono">scope.example.yaml</span> to <span class="mono">scope.yaml</span>. Allow and deny lists, nothing else. An empty allow list blocks everything.</div></div>
+          <div class="setup-step"><span class="n">5</span><div><b>Verify and snapshot</b>Run the version checks and a scope-check, then take a VM snapshot named <span class="mono">tools-installed</span>.</div></div>
+        </div>
+        <div class="run">
+<span class="cx"># 1 scanners (Go), PATH ordering matters</span><br>
+<span class="cm">go install</span> -v github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest<br>
+<span class="cm">go install</span> -v github.com/projectdiscovery/httpx/cmd/httpx@latest<br>
+<span class="cm">go install</span> -v github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest<br>
+<span class="cm">echo</span> 'export PATH=$HOME/go/bin:$PATH' &gt;&gt; ~/.zshrc &amp;&amp; <span class="cm">source</span> ~/.zshrc<br>
+<span class="cm">nuclei</span> <span class="fl">-update-templates</span><br><br>
+<span class="cx"># 2 project</span><br>
+<span class="cm">git clone</span> https://github.com/SomebodiyLost/echo-oracle.git &amp;&amp; <span class="cm">cd</span> echo-oracle<br>
+<span class="cm">python3</span> -m venv .venv &amp;&amp; <span class="cm">source</span> .venv/bin/activate<br>
+<span class="cm">pip install</span> -r requirements.txt<br><br>
+<span class="cx"># 3 keys, 4 scope</span><br>
+<span class="cm">cp</span> .env.example .env<br>
+<span class="cm">cp</span> scope.example.yaml scope.yaml<br><br>
+<span class="cx"># 5 verify</span><br>
+<span class="cm">which</span> subfinder httpx nuclei<br>
+<span class="cm">httpx</span> -version &amp;&amp; <span class="cm">subfinder</span> -version &amp;&amp; <span class="cm">nuclei</span> -version<br>
+<span class="cm">python -m echov scope-check</span> <span class="fl">--target</span> juice.lab.local<br>
+<span class="pr">Scope guard:</span> <span class="ok">ALLOW</span> juice.lab.local <span class="cx">matched allow rule "*.lab.local"</span>
+        </div>
+      </div>
+    </div>
+    <div class="pager">
+      <a class="prev" href="#overview"><small>BACK</small><span>Overview</span></a>
+      <a class="next" href="#stages"><small>NEXT · 02</small><span>The five stages</span></a>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     STAGES
+     ============================================================ -->
+<div class="view" id="view-stages" hidden>
+  <div class="wrap">
+    <div class="view-head" data-text>
+      <p class="eyebrow"><b>GUIDE</b><span class="sep">/</span>02 OF 05<span class="sep">/</span>THE FIVE STAGES</p>
+      <h2>What each stage does, and what it leaves on disk</h2>
+      <p class="lead"><span class="mono">python -m echov assess</span> runs them in this order and finishes with the Markdown report. Every stage can also be run on its own, and each reads the previous one's output from the run folder (the newest run unless you pass <span class="mono">--run</span>), so a re-run of Oracle never re-scans. No API key yet? <span class="mono">--mock</span> on triage, oracle analyze or assess uses offline reasoning at no cost.</p>
+    </div>
+    <div class="guide-body">
+      <div class="stages">
+        <div class="stagerow guard">
+          <span class="tag"><span class="idx">1</span>scope guard</span>
+          <div class="what"><b>Decides what may be touched.</b> Every hostname, whether you typed it or a scanner discovered it, gets one of three verdicts. Blocked hosts are logged with the rule that blocked them. Fail-closed: a host with no matching rule is not scanned.</div>
+          <div class="io"><span class="k">cmd</span>  <span class="v">python -m echov scope-check</span><br><span class="k">in</span>   scope.yaml<br><span class="k">out</span>  scope_decisions.json</div>
+        </div>
+        <div class="stagerow echo">
+          <span class="tag"><span class="idx">2</span>scan</span>
+          <div class="what"><b>Collects the raw surface.</b> subfinder enumerates subdomains, httpx probes which ones answer and records them with their status codes as assets, nuclei runs its template checks against the live hosts. nmap port scanning is opt-in.</div>
+          <div class="io"><span class="k">cmd</span>  <span class="v">python -m echov scan</span><br><span class="k">in</span>   allowed hosts<br><span class="k">out</span>  findings.json, assets.json</div>
+        </div>
+        <div class="stagerow echo">
+          <span class="tag"><span class="idx">3</span>triage</span>
+          <div class="what"><b>Separates findings from noise.</b> The AI reads each nuclei result with its context, keeps what is real, suppresses what is not, and writes a one-line reason for each decision so you can disagree with it. Anything it cannot confirm from the evidence alone is flagged for human review.</div>
+          <div class="io"><span class="k">cmd</span>  <span class="v">python -m echov triage</span><br><span class="k">in</span>   findings.json<br><span class="k">out</span>  triaged.json</div>
+        </div>
+        <div class="stagerow echo">
+          <span class="tag"><span class="idx">4</span>detect</span>
+          <div class="what"><b>Fingerprints the stack.</b> whatweb and wafw00f identify the technologies and any WAF in front; the TLS and security-header checks record the baseline. Noisy detectors stay off unless enabled.</div>
+          <div class="io"><span class="k">cmd</span>  <span class="v">python -m echov detect</span><br><span class="k">in</span>   assets.json<br><span class="k">out</span>  detections.json</div>
+        </div>
+        <div class="stagerow oracle">
+          <span class="tag"><span class="idx">5</span>oracle</span>
+          <div class="what"><b>Reasons over the whole run.</b> Reads everything above, maps it to the OWASP WSTG categories, correlates findings to shared root causes, and produces ranked leads plus a coverage map of what the evidence cannot yet assess, both in one analysis file. With <span class="mono">crosscheck</span>, a second model does the same independently; add <span class="mono">--reconcile</span> and a blind reviewer merges the two. For a deeper pass, <span class="mono">oracle hunt</span> proposes read-only, scope-gated fetches, waits for your approval on each, and re-reasons over what comes back, for up to six rounds.</div>
+          <div class="io"><span class="k">cmd</span>  <span class="v">python -m echov oracle analyze</span> <span class="k">then</span> <span class="v">oracle report</span><br><span class="k">in</span>   the full run folder<br><span class="k">out</span>  oracle_analysis.json, oracle_analysis.html<br><span class="k">then</span> <span class="v">python -m echov report</span> &rarr; report.md</div>
+        </div>
+        <div class="stagerow human">
+          <span class="tag"><span class="idx">&middot;</span>human review</span>
+          <div class="what"><b>Not a stage the tool runs.</b> You read the leads in the report or the console, run the proposed checks by hand, and decide what, if anything, becomes a submission.</div>
+          <div class="io"><span class="k">cmd</span>  <span class="v">python -m streamlit run dashboard/console.py</span><br><span class="k">in</span>   report.md, oracle_analysis.html<br><span class="k">out</span>  your call</div>
+        </div>
+      </div>
+    </div>
+    <div class="pager">
+      <a class="prev" href="#setup"><small>BACK · 01</small><span>Setup</span></a>
+      <a class="next" href="#scenarios"><small>NEXT · 03</small><span>Example scenarios</span></a>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     SCENARIOS
+     ============================================================ -->
+<div class="view" id="view-scenarios" hidden>
+  <div class="wrap">
+    <div class="view-head" data-text>
+      <p class="eyebrow"><b>GUIDE</b><span class="sep">/</span>03 OF 05<span class="sep">/</span>EXAMPLE SCENARIOS</p>
+      <h2>Four runs you can reproduce on the lab targets</h2>
+      <p class="lead">Each one shows the output you should expect and the part of it worth reading closely.</p>
+    </div>
+    <div class="guide-body">
+      <div class="scenarios">
+        <div class="scenario">
+          <h4>Full one-shot run</h4>
+          <p>Juice Shop in the lab, in scope. One command runs every stage.</p>
+          <div class="run">
+<span class="cm">python -m echov assess</span> <span class="fl">--target</span> juice.lab.local<br>
+<span class="cx">1/4</span> scanning   <span class="cx">7 hosts, 3 live</span><br>
+<span class="cx">2/4</span> triaging   <span class="hi">2 high</span> <span class="cx">·</span> <span class="warn">3 medium</span> <span class="cx">· 14 suppressed</span><br>
+<span class="cx">3/4</span> detection  <span class="cx">Express, no WAF</span><br>
+<span class="cx">4/4</span> oracle     <span class="cx">5 leads, coverage 4/10</span>
+          </div>
+          <div class="takeaway"><b>What to look at:</b> the 14 suppressed items and their reasons. That column is where triage earns its keep.</div>
+        </div>
+        <div class="scenario">
+          <h4>Quick scope check</h4>
+          <p>Sends nothing. Here a lookalike host that resembles the target is not in the allow list.</p>
+          <div class="run">
+<span class="cm">python -m echov scope-check</span> <span class="fl">--target</span> notmylab.local<br>
+<span class="pr">Scope guard:</span> <span class="bad">BLOCKED</span> notmylab.local<br>
+  <span class="cx">verdict</span> <span class="warn">LEAD</span> <span class="cx">not in allow list (lookalike)</span><br>
+  <span class="cx">found by</span> subfinder<br>
+  <span class="cx">log</span> data/runs/.../scope_decisions.json
+          </div>
+          <div class="takeaway"><b>What to look at:</b> nothing was sent. The host is named, the rule is named, and the same line appears in the report.</div>
+        </div>
+        <div class="scenario">
+          <h4>Re-analyze a finished run with the cross-check</h4>
+          <p>Two models read the same evidence; neither sees the other's answer. Here they disagree.</p>
+          <div class="run">
+<span class="cm">python -m echov oracle crosscheck</span> <span class="fl">--reconcile</span><br>
+<span class="pp">A</span> <span class="hi">HIGH</span>   exposed API spec <span class="cx">(A01)</span><br>
+<span class="pp">B</span> <span class="warn">MEDIUM</span> exposed API spec <span class="cx">(A05)</span><br>
+<span class="cx">priority split</span> high vs medium<br>
+<span class="pp">reviewer</span> <span class="hi">HIGH</span> <span class="cx">reasoning attached</span>
+          </div>
+          <div class="takeaway"><b>What to look at:</b> the split itself. Disagreement is reported, not averaged away, and the reviewer has to say which priority it kept and why.</div>
+        </div>
+        <div class="scenario">
+          <h4>No findings is not an all-clear</h4>
+          <p>A quiet run on a small target. Oracle reports what it could not assess.</p>
+          <div class="run">
+<span class="cm">python -m echov oracle analyze</span><br>
+<span class="cx">leads</span>     <span class="ok">0</span><br>
+<span class="cx">coverage</span>  2/10 assessed<br>
+<span class="cx">gaps</span>      WSTG-ATHN, WSTG-SESS, WSTG-INPV ...<br>
+<span class="cx">next</span>      3 manual checks proposed
+          </div>
+          <div class="takeaway"><b>What to look at:</b> the gaps list. It is the to-do list for the human stage, and it is the reason the tool never says "secure".</div>
+        </div>
+      </div>
+    </div>
+    <div class="pager">
+      <a class="prev" href="#stages"><small>BACK · 02</small><span>The five stages</span></a>
+      <a class="next" href="#legend"><small>NEXT · 04</small><span>Reading the output</span></a>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     LEGEND
+     ============================================================ -->
+<div class="view" id="view-legend" hidden>
+  <div class="wrap">
+    <div class="view-head" data-text>
+      <p class="eyebrow"><b>GUIDE</b><span class="sep">/</span>04 OF 05<span class="sep">/</span>READING THE OUTPUT</p>
+      <h2>The same colors and labels everywhere</h2>
+      <p class="lead">Terminal, report and console use one legend. Severity is the triage verdict on a finding; the scope verdict is the guard's decision on a host; the lead fields are what Oracle attaches to every item it ranks.</p>
+    </div>
+    <div class="guide-body">
+      <div class="legend">
+        <div class="legend-col">
+          <h4>SEVERITY &middot; CVSS v3.1</h4>
+          <ul>
+            <li><span class="sw crit">CRIT</span><div><b>Critical</b> <code>9.0 &ndash; 10.0</code><br>Verify by hand before anything else.</div></li>
+            <li><span class="sw hi">HIGH</span><div><b>High</b> <code>7.0 &ndash; 8.9</code><br>Serious; usually one step from proof.</div></li>
+            <li><span class="sw md">MED</span><div><b>Medium</b> <code>4.0 &ndash; 6.9</code><br>Worth reporting; limited impact alone.</div></li>
+            <li><span class="sw lo">LOW</span><div><b>Low</b> <code>0.1 &ndash; 3.9</code><br>Hygiene. Often the root cause of several mediums.</div></li>
+            <li><span class="sw info">INFO</span><div><b>Info</b> <code>0.0</code><br>Recorded for context. Not a finding.</div></li>
+          </ul>
+        </div>
+        <div class="legend-col">
+          <h4>LEAD PRIORITY &middot; ORACLE</h4>
+          <ul>
+            <li><span class="sw hi">HIGH</span><div><b>Look here first</b><br>Oracle judges this the most worth investigating.</div></li>
+            <li><span class="sw md">MED</span><div><b>Worth a pass</b><br>Plausible from the stack or the findings; needs a manual check to confirm.</div></li>
+            <li><span class="sw lo">LOW</span><div><b>Background</b><br>Hygiene or context. Usually explains other items rather than standing alone.</div></li>
+          </ul>
+          <p style="margin:14px 0 0;font-size:13px;color:var(--faint)">A separate axis from CVSS. Findings get a severity, up to Critical; leads only ever get high, medium or low. Every lead carries a read-only next check and a step to test by hand.</p>
+        </div>
+        <div class="legend-col">
+          <h4>FLAGS</h4>
+          <ul>
+            <li><span class="fld">needs human review</span><div><b>Set by triage</b><br>The finding could not be confirmed from the evidence alone; the report says <span class="mono">Verify manually</span>. Example: an exposed <span class="mono">/metrics</span> endpoint where the scan did not capture the page contents.</div></li>
+            <li><span class="fld">priority split</span><div><b>Set by crosscheck</b><br>The two models gave the same lead different priorities. Shown as-is; with <span class="mono">--reconcile</span> the reviewer picks one and says why.</div></li>
+          </ul>
+        </div>
+        <div class="legend-col">
+          <h4>SCOPE VERDICT &middot; GUARD</h4>
+          <ul>
+            <li><span class="sw allow">ALLOW</span><div><b>In scope</b><br>Matched an allow rule and no deny rule.</div></li>
+            <li><span class="sw lead">LEAD</span><div><b>Blocked, worth a look</b><br>Discovered but not in the allow list. Logged for you to add or ignore. Nothing sent.</div></li>
+            <li><span class="sw deny">DENY</span><div><b>Blocked, explicitly</b><br>Matched a deny rule. Logged with the rule, never scanned.</div></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <div class="pager">
+      <a class="prev" href="#scenarios"><small>BACK · 03</small><span>Example scenarios</span></a>
+      <a class="next" href="#dashboard"><small>NEXT · 05</small><span>Dashboard</span></a>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     DASHBOARD
+     ============================================================ -->
+<div class="view" id="view-dashboard" hidden>
+  <div class="wrap">
+    <div class="view-head" data-text>
+      <p class="eyebrow"><b>GUIDE</b><span class="sep">/</span>05 OF 05<span class="sep">/</span>DASHBOARD</p>
+      <h2>The security console, reading the same run folder</h2>
+      <p class="lead">A Streamlit app over the files the stages write. No database and no second copy of the data: what the terminal printed is what the console shows, with the suppressed items and scope decisions one click away.</p>
+    </div>
+    <div class="guide-body">
+      <div class="shot">
+        <div class="term-bar">
+          <span class="dot" style="background:#ff5f56"></span>
+          <span class="dot" style="background:#ffbd2e"></span>
+          <span class="dot" style="background:#27c93f"></span>
+          <span class="term-title mono">localhost:8501 &middot; security dashboard</span>
+        </div>
+        <img src="screenshots/dashboard-overview.png" alt="Echo Oracle security dashboard after a run: score, findings and attention tiles; security level ring, OWASP attack-surface radar and WSTG coverage; top leads and risk by priority">
+      </div>
+      <div class="run" style="margin-top:16px">
+<span class="cx"># launch the console over the latest run</span><br>
+<span class="cm">python -m streamlit run</span> dashboard/console.py
+      </div>
+      <div class="shot-cap" data-text>
+        <div><b>Top row</b>Security score and grade, finding count, leads that need attention, WSTG coverage, and hosts scanned with the guard's verdict.</div>
+        <div><b>Middle row</b>Severity breakdown on a ring, the attack-surface radar across the OWASP Top 10, and methodology coverage once Oracle has run.</div>
+        <div><b>Bottom row</b>Oracle's top leads with class and category per item, and risk by priority across the current leads.</div>
+      </div>
+    </div>
+    <div class="pager">
+      <a class="prev" href="#legend"><small>BACK · 04</small><span>Reading the output</span></a>
+      <a class="next" href="#overview"><small>DONE</small><span>Back to overview</span></a>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<footer>
+  <div class="wrap" data-text>
+    <div><span class="wordmark"><span class="e">Echo</span> <span class="o">Oracle</span></span></div>
+    <div>Authorized testing only. A human verifies every finding.</div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    "use strict";
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    // ---- Views: one visible at a time, chosen by location.hash ----
+    var VIEWS = ["overview", "setup", "stages", "scenarios", "legend", "dashboard"];
+    var tabs = document.querySelectorAll("#tabs a[data-view]");
+    var current = null;
+
+    function showView(name, anchor) {
+      VIEWS.forEach(function (v) {
+        var el = document.getElementById("view-" + v);
+        if (el) el.hidden = (v !== name);
+      });
+      tabs.forEach(function (a) {
+        a.classList.toggle("active", a.getAttribute("data-view") === name);
+      });
+      var changed = current !== name;
+      current = name;
+      if (anchor) {
+        var target = document.getElementById(anchor);
+        if (target) target.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      } else if (changed) {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      }
+    }
+
+    function route() {
+      var h = (location.hash || "#overview").slice(1);
+      if (VIEWS.indexOf(h) !== -1) { showView(h, null); return; }
+      // Any other hash is an anchor inside the overview (#run, #safety ...).
+      showView("overview", document.getElementById(h) ? h : null);
+    }
+
+    window.addEventListener("hashchange", route);
+    route();
+
+    // ---- Self-running hero terminal ----
+    (function runTerminal() {
+      var typed = document.querySelector(".typed");
+      if (!typed) return;
+      var outs = document.querySelectorAll(".term-body .tline.out");
+      var endPrompt = document.querySelector(".endprompt");
+      var cmdCursor = document.querySelector(".cmd .cursor");
+      var text = typed.getAttribute("data-text");
+
+      if (reduce) {
+        typed.textContent = text;
+        outs.forEach(function (line) { line.classList.add("show"); });
+        if (endPrompt) endPrompt.classList.add("show");
+        return;
+      }
+      function streamOutput() {
+        var i = 0;
+        (function next() {
+          if (i < outs.length) { outs[i].classList.add("show"); i++; setTimeout(next, 160); }
+          else if (endPrompt) { endPrompt.classList.add("show"); }
+        })();
+      }
+      function typeCommand() {
+        var i = 0;
+        (function step() {
+          if (i <= text.length) { typed.textContent = text.slice(0, i); i++; setTimeout(step, 30); }
+          else { if (cmdCursor) cmdCursor.classList.add("off"); setTimeout(streamOutput, 250); }
+        })();
+      }
+      setTimeout(typeCommand, 650);
+    })();
+
+    // ---- Cursor-reactive dot field ----
+    // A fixed canvas of faint dots. Dots within reach of the pointer grow,
+    // brighten and tint toward Echo cyan, with a small outward push and an
+    // eased falloff. The pointer position is smoothed so the field lags a
+    // touch behind the cursor. The grid scrolls at quarter speed with the
+    // page. With reduced motion, or no fine pointer, it is a static grid.
+    (function dotField() {
+      var canvas = document.getElementById("dots");
+      if (!canvas || !canvas.getContext) return;
+      var ctx = canvas.getContext("2d");
+      var finePointer = window.matchMedia("(pointer: fine)").matches;
+      var interactive = finePointer && !reduce;
+
+      var SPACING = 30;        // px between dots
+      var BASE_R = 1.0;        // resting dot radius
+      var BASE_A = 0.13;       // resting dot alpha
+      var REACH = 180;         // cursor influence radius
+      var MAX_R = 2.8;         // dot radius at the cursor
+      var PUSH = 6;            // max outward displacement
+      var LAG = 0.16;          // pointer smoothing per frame
+
+      var W = 0, H = 0, dpr = 1;
+      var px = -9999, py = -9999;   // smoothed pointer
+      var tx = -9999, ty = -9999;   // target pointer
+      var strength = 0, targetStrength = 0;
+      var scrollOff = 0;
+      var raf = null, lastMove = 0;
+
+      function resize() {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        W = window.innerWidth; H = window.innerHeight;
+        canvas.width = Math.round(W * dpr);
+        canvas.height = Math.round(H * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        draw();
+      }
+
+      function ease(t) { return t * t * (3 - 2 * t); }
+
+      // Text that sits directly on the black is tagged data-text. Dots inside
+      // those boxes (padded a little) stay faint and ignore the cursor, so the
+      // field reads as a layer behind the page rather than on top of it.
+      var textEls = document.querySelectorAll("[data-text]");
+      var PAD = 10;
+      function textRects() {
+        var out = [];
+        for (var i = 0; i < textEls.length; i++) {
+          var r = textEls[i].getBoundingClientRect();
+          if (r.width === 0 || r.bottom < -PAD || r.top > H + PAD) continue;
+          out.push([r.left - PAD, r.top - PAD, r.right + PAD, r.bottom + PAD]);
+        }
+        return out;
+      }
+      function inText(rects, x, y) {
+        for (var i = 0; i < rects.length; i++) {
+          var q = rects[i];
+          if (x >= q[0] && x <= q[2] && y >= q[1] && y <= q[3]) return true;
+        }
+        return false;
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, W, H);
+        var cx = W / 2, cy = H / 2;
+        var vig = Math.max(W, H) * 0.75;
+        var offY = ((scrollOff % SPACING) + SPACING) % SPACING;
+        var startX = ((W % SPACING) / 2);
+        var reach2 = REACH * REACH;
+        var rects = textRects();
+        for (var y = -offY; y < H + SPACING; y += SPACING) {
+          for (var x = startX; x < W; x += SPACING) {
+            var dx = x - px, dy = y - py;
+            var d2 = dx * dx + dy * dy;
+            var r = BASE_R, a = BASE_A, ox = 0, oy = 0, k = 0;
+            var quiet = inText(rects, x, y);
+            if (!quiet && strength > 0.01 && d2 < reach2) {
+              var d = Math.sqrt(d2);
+              k = ease(1 - d / REACH) * strength;
+              r = BASE_R + (MAX_R - BASE_R) * k;
+              a = BASE_A + (0.95 - BASE_A) * k;
+              if (d > 0.5) { ox = (dx / d) * PUSH * k; oy = (dy / d) * PUSH * k; }
+            }
+            // vignette: fainter toward the viewport edges
+            var ex = x - cx, ey = y - cy;
+            var v = 1 - Math.min(1, Math.sqrt(ex * ex + ey * ey) / vig);
+            a *= 0.45 + 0.55 * v;
+            if (quiet) a *= 0.35;
+            // tint: white at rest, cyan under the cursor
+            var g = Math.round(255 - (255 - 211) * k);
+            var b = Math.round(255 - (255 - 238) * k);
+            var rr = Math.round(255 - (255 - 34) * k);
+            ctx.fillStyle = "rgba(" + rr + "," + g + "," + b + "," + a.toFixed(3) + ")";
+            ctx.beginPath();
+            ctx.arc(x + ox, y + oy, r, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+      }
+
+      function frame(now) {
+        raf = null;
+        px += (tx - px) * LAG;
+        py += (ty - py) * LAG;
+        strength += (targetStrength - strength) * 0.12;
+        draw();
+        var settled = Math.abs(tx - px) < 0.3 && Math.abs(ty - py) < 0.3 &&
+                      Math.abs(targetStrength - strength) < 0.01;
+        if (!settled || now - lastMove < 120) raf = window.requestAnimationFrame(frame);
+      }
+      function kick() { if (raf === null) raf = window.requestAnimationFrame(frame); }
+
+      window.addEventListener("resize", resize, { passive: true });
+      window.addEventListener("scroll", function () {
+        scrollOff = -(window.scrollY || 0) * 0.25;
+        kick();
+      }, { passive: true });
+
+      if (interactive) {
+        window.addEventListener("pointermove", function (e) {
+          tx = e.clientX; ty = e.clientY;
+          targetStrength = 1;
+          lastMove = performance.now();
+          kick();
+        }, { passive: true });
+        document.addEventListener("pointerleave", function () { targetStrength = 0; kick(); });
+        document.addEventListener("mouseleave", function () { targetStrength = 0; kick(); });
+      }
+
+      resize();
+    })();
+
+    // ---- Reveal on scroll (also fires when a hidden view is shown) ----
+    (function setupReveal() {
+      var els = document.querySelectorAll(".reveal");
+      if (!("IntersectionObserver" in window) || reduce) {
+        els.forEach(function (el) { el.classList.add("in"); });
+        return;
+      }
+      var observer = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) { entry.target.classList.add("in"); observer.unobserve(entry.target); }
+        });
+      }, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
+      els.forEach(function (el) { observer.observe(el); });
+    })();
+  })();
+</script>
+</body>
+</html>
