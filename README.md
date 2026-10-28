@@ -110,7 +110,7 @@ The version banner should say `projectdiscovery`.
 ## Install
 
 ```bash
-git clone https://github.com/your-user/echo-oracle.git
+git clone https://github.com/SomebodiyLost/echo-oracle.git
 cd echo-oracle
 python -m venv .venv
 source .venv/bin/activate
