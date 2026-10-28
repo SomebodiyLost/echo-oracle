@@ -1,0 +1,104 @@
+===== assess
+Usage: python -m echov assess [OPTIONS]
+
+  One-shot pipeline: scan -> triage -> detection -> Oracle assessment ->
+  report.
+
+Options:
+  --scope TEXT            [default: scope.yaml]
+  --target TEXT           Host to assess (repeatable).
+  --domain TEXT           Root domain for subfinder discovery.
+  --tags TEXT             [default: exposure,misconfig,tech]
+  --nmap                  Opt-in port scan.
+  --detect / --no-detect  Run detection tools (whatweb/wafw00f/headers).
+  --model TEXT
+  --mock                  Oracle uses free offline reasoning.
+  --context TEXT          [default: Authorized assessment.]
+  --yes                   Skip confirmations (lab only).
+  --help                  Show this message and exit.
+===== scan
+Usage: python -m echov scan [OPTIONS]
+
+  Run the recon pipeline against in-scope targets only.
+
+Options:
+  --scope TEXT          [default: scope.yaml]
+  --domain TEXT         Root domain for subfinder discovery.
+  --target TEXT         Seed a host directly (repeatable).
+  --no-nuclei           Discovery only; skip the vuln scan.
+  --tags TEXT           Limit nuclei to these template tags.
+  --rate-limit INTEGER  [default: 150]
+  --yes                 Skip the confirmation prompt.
+  --nmap                OPT-IN port scan (top-100 ports). Off unless passed.
+  --nmap-ports          Opt-in port scan, top-1000 ports.
+  --nmap-all            Opt-in port scan, ALL 65535 ports (loud — needs
+                        permission).
+  --help                Show this message and exit.
+===== triage
+Usage: python -m echov triage [OPTIONS]
+
+  Triage a run's findings: real / false-positive / needs-review.
+
+Options:
+  --run TEXT      Run dir under data/runs/. Defaults to newest.
+  --context TEXT  [default: Known-vulnerable practice lab (OWASP Juice Shop).]
+  --model TEXT    Override the triage model.
+  --mock          Use offline rule-based triage (no API key, no cost).
+  --help          Show this message and exit.
+===== detect
+Usage: python -m echov detect [OPTIONS]
+
+  Run read-only detection tools (tech, WAF, TLS, headers) on in-scope targets.
+
+Options:
+  --scope TEXT   [default: scope.yaml]
+  --target TEXT  Host/URL to fingerprint (repeatable).
+  --tools TEXT   Comma list; default = all installed.
+  --help         Show this message and exit.
+===== report
+Usage: python -m echov report [OPTIONS]
+
+  Generate a human-readable Markdown report from a triaged run.
+
+Options:
+  --run TEXT  Run dir under data/runs/. Defaults to newest.
+  --help      Show this message and exit.
+===== scope-check
+Usage: python -m echov scope-check [OPTIONS]
+
+  Check hosts against the guard. Scans nothing.
+
+Options:
+  --scope TEXT   [default: scope.yaml]
+  --target TEXT
+  --file TEXT
+  --help         Show this message and exit.
+===== oracle
+Usage: python -m echov oracle [OPTIONS] COMMAND [ARGS]...
+
+  Oracle — the reasoning engine (analyzes finished runs).
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  analyze     Reason over a finished run and surface prioritized leads.
+  crosscheck  Run two models on the same run and flag where they agree vs...
+  fetch       Run the read-only fetches Oracle proposed in its last...
+  hunt        Bounded read-only investigate loop: Oracle proposes...
+  report      Render the latest Oracle analysis as a styled HTML page.
+===== oracle analyze
+Usage: python -m echov [OPTIONS] COMMAND [ARGS]...
+Try 'python -m echov --help' for help.
+
+Error: No such command 'oracle analyze'. Did you mean 'oracle'?
+===== oracle crosscheck
+Usage: python -m echov [OPTIONS] COMMAND [ARGS]...
+Try 'python -m echov --help' for help.
+
+Error: No such command 'oracle crosscheck'.
+===== oracle report
+Usage: python -m echov [OPTIONS] COMMAND [ARGS]...
+Try 'python -m echov --help' for help.
+
+Error: No such command 'oracle report'. (Did you mean one of: 'oracle', 'report'?)

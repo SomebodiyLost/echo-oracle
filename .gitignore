@@ -1,0 +1,21 @@
+# environments and secrets
+.venv/
+.env
+.streamlit/secrets.toml
+
+# run output (may contain target data)
+data/runs/
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# editor and OS
+*.bak
+*.swp
+.DS_Store
+.vscode/
+.idea/
+scope.yaml

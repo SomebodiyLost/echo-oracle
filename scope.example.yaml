@@ -1,0 +1,15 @@
+allow:
+  domains:
+    - testphp.vulnweb.com
+    - localhost
+    - mylab.local
+  wildcards:
+    - "*.mylab.local"
+  cidrs:
+    - "127.0.0.0/8"
+deny:
+  hosts:
+    - "payments.mylab.local"
+    - "*.internal.mylab.local"
+  cidrs:
+    - "10.0.0.0/8" 

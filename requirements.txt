@@ -1,0 +1,8 @@
+anthropic>=1.8
+openai>=3.39
+click
+pydantic>=2
+python-dotenv
+PyYAML
+rich
+streamlit>=1.64
