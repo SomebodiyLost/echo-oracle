@@ -1,15 +1,17 @@
 from __future__ import annotations
+
 import sys
 from collections import Counter
+from datetime import UTC
 from pathlib import Path
 
 import click
 from rich.console import Console
 from rich.table import Table
 
-from echov.scope import ScopeGuard
-from echov.models import Verdict
 from echov import runner
+from echov.models import Verdict
+from echov.scope import ScopeGuard
 
 console = Console()
 COLOR = {Verdict.ALLOW: "green", Verdict.DENY: "red", Verdict.LEAD: "yellow"}
@@ -121,7 +123,8 @@ def scan(scope_path, domain, seeds, no_nuclei, tags, rate_limit, yes, nmap_profi
 def triage(run_dir, context, model, mock):
     """Triage a run's findings: real / false-positive / needs-review."""
     import json as _json
-    from echov.triage.client import TriageClient, DEFAULT_MODEL
+
+    from echov.triage.client import DEFAULT_MODEL, TriageClient
     from echov.triage.mock_client import MockTriageClient
 
     runs = sorted(Path("data/runs").glob("*"))
@@ -213,8 +216,7 @@ def oracle():
 @click.option("--mock", is_flag=True, help="Offline reasoning — no API key, no cost.")
 def oracle_analyze(run_dir, context, model, mock):
     """Reason over a finished run and surface prioritized leads."""
-    from echov.oracle.analyze import run_analyze
-    from echov.oracle.analyze import latest_run_with_findings
+    from echov.oracle.analyze import latest_run_with_findings, run_analyze
     if run_dir:
         run_path = Path(run_dir)
     else:
@@ -250,9 +252,10 @@ def oracle_hunt(run_dir, scope_path, context, program_path, model, rounds):
 def oracle_fetch(run_dir, scope_path):
     """Run the read-only fetches Oracle proposed in its last analysis (scope-gated)."""
     import json as _json
+
+    from echov.models import Verdict
     from echov.oracle.fetcher import fetch
     from echov.scope import ScopeGuard
-    from echov.models import Verdict
 
     runs = sorted(Path("data/runs").glob("*"))
     run_path = Path(run_dir) if run_dir else (runs[-1] if runs else None)
@@ -320,7 +323,8 @@ def oracle_report(run_dir):
 def detect(scope_path, targets, tool_names):
     """Run read-only detection tools (tech, WAF, TLS, headers) on in-scope targets."""
     import json as _json
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from echov.tools import registry
 
     if not targets:
@@ -359,7 +363,7 @@ def detect(scope_path, targets, tool_names):
         console.print("Aborted.")
         return
 
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
     run_path = Path("data/runs") / ts
     run_path.mkdir(parents=True, exist_ok=True)
 
@@ -397,11 +401,12 @@ def detect(scope_path, targets, tool_names):
 @click.option("--yes", is_flag=True, help="Skip confirmations (lab only).")
 def assess(scope_path, seeds, domain, tags, use_nmap, detect, model, mock, context, yes):
     """One-shot pipeline: scan -> triage -> detection -> Oracle assessment -> report."""
-    from echov import runner
-    from echov.scope import ScopeGuard
-    from echov.oracle.analyze import run_analyze
-    from echov.tools import registry
     import json as _json
+
+    from echov import runner
+    from echov.oracle.analyze import run_analyze
+    from echov.scope import ScopeGuard
+    from echov.tools import registry
 
     if not seeds and not domain:
         raise click.UsageError("Give --target or --domain.")
@@ -466,11 +471,12 @@ def assess(scope_path, seeds, domain, tags, use_nmap, detect, model, mock, conte
 @click.option("--yes", is_flag=True, help="Skip confirmations (lab only).")
 def assess(scope_path, seeds, domain, tags, use_nmap, detect, model, mock, context, yes):
     """One-shot pipeline: scan -> triage -> detection -> Oracle assessment -> report."""
-    from echov import runner
-    from echov.scope import ScopeGuard
-    from echov.oracle.analyze import run_analyze
-    from echov.tools import registry
     import json as _json
+
+    from echov import runner
+    from echov.oracle.analyze import run_analyze
+    from echov.scope import ScopeGuard
+    from echov.tools import registry
 
     if not seeds and not domain:
         raise click.UsageError("Give --target or --domain.")
@@ -530,8 +536,8 @@ def assess(scope_path, seeds, domain, tags, use_nmap, detect, model, mock, conte
 @click.option("--reconcile", is_flag=True, help="Add a blind reviewer pass that merges both analyses.")
 def oracle_crosscheck(run_dir, context, sonnet_model, gpt_model, reconcile):
     """Run two models on the same run and flag where they agree vs disagree."""
-    from echov.oracle.crosscheck import run_crosscheck
     from echov.oracle.analyze import latest_run_with_findings
+    from echov.oracle.crosscheck import run_crosscheck
     run_path = Path(run_dir) if run_dir else latest_run_with_findings()
     if run_path is None:
         raise click.UsageError("No runs with findings found.")

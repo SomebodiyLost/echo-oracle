@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 from dotenv import load_dotenv
 from openai import OpenAI
-from echov.oracle.schema import OracleAnalysis
+
 from echov.oracle import prompts
 from echov.oracle.client import _extract_json, _normalize_owasp, _normalize_wstg
+from echov.oracle.schema import OracleAnalysis
 
 load_dotenv(dotenv_path=".env")
 GPT_MODEL = "gpt-6.1-sol"   # verify current model string at developers.openai.com

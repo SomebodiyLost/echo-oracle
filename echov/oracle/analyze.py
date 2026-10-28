@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from echov.oracle.client import OracleClient, OracleRefused, DEFAULT_MODEL
+
+from echov.oracle.client import DEFAULT_MODEL, OracleClient, OracleRefused
 from echov.oracle.mock_client import MockOracleClient
 
 console = Console()

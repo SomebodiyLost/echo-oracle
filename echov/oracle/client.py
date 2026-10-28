@@ -1,8 +1,10 @@
 from __future__ import annotations
-from dotenv import load_dotenv
+
 from anthropic import Anthropic
-from echov.oracle.schema import OracleAnalysis
+from dotenv import load_dotenv
+
 from echov.oracle import prompts
+from echov.oracle.schema import OracleAnalysis
 
 load_dotenv(dotenv_path=".env")
 DEFAULT_MODEL = "claude-sonnet-5-5"   # verify current string at docs.claude.com

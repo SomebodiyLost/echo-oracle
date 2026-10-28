@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from echov.scanners.base import resolve_binary, run_lines
 
 

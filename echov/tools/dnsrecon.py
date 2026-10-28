@@ -1,5 +1,8 @@
 from __future__ import annotations
-import json, shutil, subprocess, tempfile
+
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
 NAME = "dnsrecon"

@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import Literal, Optional, List
+
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 Severity = Literal["info", "low", "medium", "high", "critical"]
@@ -20,8 +22,8 @@ class TriageVerdict(BaseModel):
     adjusted_severity: Severity
     reasoning: str
     needs_human_review: bool
-    draft_writeup: Optional[DraftWriteup] = None
+    draft_writeup: DraftWriteup | None = None
 
 
 class TriageBatch(BaseModel):
-    verdicts: List[TriageVerdict]
+    verdicts: list[TriageVerdict]

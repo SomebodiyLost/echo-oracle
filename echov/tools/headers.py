@@ -1,5 +1,8 @@
 from __future__ import annotations
-import json, urllib.request, urllib.error
+
+import json
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 NAME = "headers"

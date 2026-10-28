@@ -1,16 +1,17 @@
 from __future__ import annotations
+
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
+from echov.models import Asset, Finding, Verdict
+from echov.scanners import httpx, nmap, nuclei, subfinder
 from echov.scope import ScopeGuard, write_decision_log
-from echov.models import Verdict, Asset, Finding
-from echov.scanners import subfinder, httpx, nuclei, nmap
 from echov.severity import classify
 
 
 def new_run_dir(base="data/runs"):
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
+    ts = datetime.now(UTC).strftime("%Y-%m-%dT%H-%M-%S")
     d = Path(base) / ts
     d.mkdir(parents=True, exist_ok=True)
     return d

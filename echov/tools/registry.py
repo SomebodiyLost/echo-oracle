@@ -3,7 +3,8 @@ CATEGORY, BINARIES, run(target, workdir) -> normalized dict, and optionally
 OPT_IN=True (noisy/active tools that only run when explicitly requested).
 Nothing here sends attack traffic."""
 from __future__ import annotations
-from echov.tools import whatweb, wafw00f, testssl, headers, dnsrecon, nikto
+
+from echov.tools import dnsrecon, headers, nikto, testssl, wafw00f, whatweb
 
 _ALL = (whatweb, wafw00f, testssl, headers, dnsrecon, nikto)
 TOOLS = {m.NAME: m for m in _ALL}

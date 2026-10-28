@@ -1,7 +1,8 @@
 """Offline reasoning — no API key, no cost. Heuristic, not real reasoning,
 but enough to test the whole Oracle pipeline for free."""
 from __future__ import annotations
-from echov.oracle.schema import OracleAnalysis, Lead, CoverageItem
+
+from echov.oracle.schema import Lead, OracleAnalysis
 
 
 class MockOracleClient:

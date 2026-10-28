@@ -1,14 +1,16 @@
 from __future__ import annotations
+
 import json
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import List
+
+from anthropic import Anthropic
 from pydantic import BaseModel
 from rich.console import Console
-from anthropic import Anthropic
-from echov.oracle.client import OracleClient, OracleRefused, DEFAULT_MODEL, _extract_json
-from echov.oracle.gpt_client import GPTOracleClient, GPTRefused, GPT_MODEL
+
 from echov.oracle.analyze import load_run
+from echov.oracle.client import DEFAULT_MODEL, OracleClient, _extract_json
+from echov.oracle.gpt_client import GPT_MODEL, GPTOracleClient
 
 console = Console()
 PRIO_COLOR = {"high": "red", "medium": "yellow", "low": "green"}
@@ -23,7 +25,7 @@ class ReconciledLead(BaseModel):
 
 class Reconciliation(BaseModel):
     summary: str
-    leads: List[ReconciledLead]
+    leads: list[ReconciledLead]
 
 
 def _sim(a, b):

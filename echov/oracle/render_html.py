@@ -1,5 +1,7 @@
 from __future__ import annotations
-import json, html
+
+import html
+import json
 from pathlib import Path
 
 PRIO = {"high": ("#f2606a", "HIGH"), "medium": ("#f2b24c", "MEDIUM"), "low": ("#56d29a", "LOW")}

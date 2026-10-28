@@ -1,6 +1,7 @@
 """Offline stand-in for TriageClient — no API key, no network.
 Applies simple rules so you can test the whole pipeline end to end."""
 from __future__ import annotations
+
 from echov.triage.schema import TriageVerdict
 
 INFO_NOISE = ("technology", "fingerprint", "wappalyzer",

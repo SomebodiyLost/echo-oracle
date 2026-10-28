@@ -1,5 +1,7 @@
 from __future__ import annotations
-from typing import List, Literal, Optional
+
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 Priority = Literal["high", "medium", "low"]
@@ -29,7 +31,7 @@ class Lead(BaseModel):
     result: str = ""        # what the evidence actually shows
     inference: str = ""     # what it implies about a systemic weakness
     reasoning: str = ""     # the connected narrative
-    evidence: List[str] = Field(default_factory=list)
+    evidence: list[str] = Field(default_factory=list)
     readonly_next_step: str = ""
     human_test: str = ""
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
@@ -43,6 +45,6 @@ class CoverageItem(BaseModel):
 
 class OracleAnalysis(BaseModel):
     summary: str
-    surface_notes: List[str] = Field(default_factory=list)
-    leads: List[Lead]
-    coverage: List[CoverageItem] = Field(default_factory=list)
+    surface_notes: list[str] = Field(default_factory=list)
+    leads: list[Lead]
+    coverage: list[CoverageItem] = Field(default_factory=list)

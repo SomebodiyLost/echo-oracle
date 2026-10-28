@@ -1,6 +1,7 @@
 from __future__ import annotations
+
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from echov.severity import SEVERITY_RANK, normalize_severity
@@ -65,7 +66,7 @@ def _dedupe(decisions):
 def build_markdown(run_path, tool_name="Echo"):
     triaged, decisions = _load(run_path)
     decisions = _dedupe(decisions)
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    now = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     for f in triaged:
         f["_score"] = _priority(f)

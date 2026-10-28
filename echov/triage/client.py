@@ -1,8 +1,10 @@
 from __future__ import annotations
-from dotenv import load_dotenv
+
 from anthropic import Anthropic
-from echov.triage.schema import TriageBatch
+from dotenv import load_dotenv
+
 from echov.triage import prompts
+from echov.triage.schema import TriageBatch
 
 load_dotenv(dotenv_path=".env")
 DEFAULT_MODEL = "claude-haiku-4-5-20251001"   # cheap + fast; verify at docs.claude.com

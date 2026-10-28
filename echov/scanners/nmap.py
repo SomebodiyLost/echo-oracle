@@ -2,6 +2,7 @@
 Port scanning is noisy and many programs restrict it, so it is never part of a
 default scan. Runs behind the scope guard like every other active step."""
 from __future__ import annotations
+
 import shutil
 import subprocess
 import xml.etree.ElementTree as ET

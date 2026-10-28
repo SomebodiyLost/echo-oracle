@@ -1,18 +1,20 @@
 from __future__ import annotations
+
 import json
 from pathlib import Path
+
 import click
-from rich.console import Console
 from anthropic import Anthropic
 from dotenv import load_dotenv
+from rich.console import Console
 
-from echov.scope import ScopeGuard
 from echov.models import Verdict
-from echov.oracle.fetcher import fetch
-from echov.oracle.loop_schema import RoundOutput
-from echov.oracle.loop_prompts import LOOP_SYSTEM, program_block
-from echov.oracle.client import DEFAULT_MODEL
 from echov.oracle.analyze import load_run
+from echov.oracle.client import DEFAULT_MODEL
+from echov.oracle.fetcher import fetch
+from echov.oracle.loop_prompts import LOOP_SYSTEM, program_block
+from echov.oracle.loop_schema import RoundOutput
+from echov.scope import ScopeGuard
 
 load_dotenv(dotenv_path=".env")
 console = Console()

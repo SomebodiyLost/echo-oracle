@@ -1,7 +1,8 @@
 
 import pytest
-from echov.scope import ScopeGuard, normalize_host
+
 from echov.models import Verdict
+from echov.scope import ScopeGuard, normalize_host
 
 
 @pytest.fixture

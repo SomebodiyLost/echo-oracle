@@ -1,7 +1,10 @@
 """Nikto web-server misconfiguration scanner. OPT-IN ONLY — it is noisy and
 sends many requests, so it never runs in a default detection pass."""
 from __future__ import annotations
-import json, shutil, subprocess
+
+import json
+import shutil
+import subprocess
 from pathlib import Path
 
 NAME = "nikto"

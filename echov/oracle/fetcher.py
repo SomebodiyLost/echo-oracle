@@ -1,8 +1,9 @@
 """Dedicated READ-ONLY fetcher for Oracle. Structurally cannot do anything but
 read: GET/HEAD only, no request body, no auth headers. One URL at a time."""
 from __future__ import annotations
-import urllib.request
+
 import urllib.error
+import urllib.request
 
 ALLOWED_METHODS = {"GET", "HEAD"}
 MAX_BODY = 200_000   # cap body so a huge response can't blow up context/cost

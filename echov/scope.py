@@ -1,8 +1,11 @@
 from __future__ import annotations
+
 import ipaddress
 import json
 from pathlib import Path
+
 import yaml
+
 from echov.models import ScopeDecision, Verdict
 
 
